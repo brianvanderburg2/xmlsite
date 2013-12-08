@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<document xmlns:xi="http://www.w3.org/2001/XInclude">
+    <xi:include href="a.xml" />
+    <xi:include href="b/a.xml" />
+    <record name="record1">
+    </record>
+
+    <record name="record2">
+    </record>
+</document>
