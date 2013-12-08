@@ -188,7 +188,7 @@ class Scanner(object):
             
             # Root node
             state = etree.Element(ns + 'state')
-            state.set('depth', '{0}'.format(depth))
+            state.set('stateroot', '../' * depth)
             if prevname:
                 state.set('prev', prevname)
             if nextname:

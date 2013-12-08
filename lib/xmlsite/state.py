@@ -18,7 +18,7 @@ class _State(object):
 
     @property
     def valid(self):
-        return bool(self.year and self.month and self.day and self.title)
+        return bool(self.year and self.month and self.day and self.title and self.summaries)
 
     def __cmp__(self, other):
         v = int(self.year) - int(other.year)
