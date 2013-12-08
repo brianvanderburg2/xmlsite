@@ -131,6 +131,7 @@ class Builder(object):
 
     def buildstate(self, sourcefile):
         inxml = etree.parse(sourcefile)
+        inxml.xinclude()
         root = inxml.getroot().tag
 
         if root in self.states:
