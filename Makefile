@@ -14,8 +14,8 @@ test: check
 
 .PHONY: clean
 clean: check
-	rm -r test/out
-	rm -r output
+	rm -rf test/out
+	rm -rf output
 
 .PHONY: tarball
 tarball: NAME:=xmlsite-$(shell date +%Y%m%d)-$(shell git describe --always)
