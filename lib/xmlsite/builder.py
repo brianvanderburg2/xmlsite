@@ -20,7 +20,6 @@ class Builder(object):
         # Basic stuff
         self.extension = xml.get('extension', '.html')
         self.encoding = xml.get('encoding', 'utf-8')
-        self.doctype = xml.get('doctype', '<!DOCTYPE html>')
         self.strip = util.getbool(xml.get('strip', 'no'))
 
         # Parameters
@@ -51,21 +50,17 @@ class Builder(object):
                 else:
                     result = elem.text
 
-            return result
+            return result.strip()
 
         self.header = loader(xml.find('header'))
         self.footer = loader(xml.find('footer'))
 
-        # Fix closing tags
-        self.closetags = []
-        for i in xml.findall('closetag'):
-            self.closetags.append(i.get('tag'))
-
+        # Fix empty tags that are not supposed to be empty
         self.emptytags = []
         for i in xml.findall('emptytag'):
             self.emptytags.append(i.get('tag'))
 
-        # Preserve tags during HTML reduction
+        # Preserve tags during striping
         self.preservetags = []
         for i in xml.findall('preservetag'):
             self.preservetags.append(i.get('tag'))
@@ -156,6 +151,9 @@ class Builder(object):
             return False
 
     def cleanup(self, output, params):
+        # Remove leading/tailing whitespace
+        output = output.strip()
+
         # Remove <?xml .. ?>
         if output[:2] == '<?':
             pos = output.find('?>')
@@ -163,14 +161,12 @@ class Builder(object):
                 output = output[pos + 2:]
                 output = output.lstrip()
 
-        # Replace <!DOCTYPE ... >
-        if len(self.doctype) > 0:
-            if output[:2] == '<!':
-                pos = output.find('>')
-                if pos > 0:
-                    output = self.doctype + output[pos + 1:]
-            else:
-                output = self.doctype + '\n' + output
+        # Remove <!DOCTYPE ... >
+        if output[:2] == '<!':
+            pos = output.find('>')
+            if pos > 0:
+                output = output[pos + 1:]
+                output = output.lstrip()
 
         # Fix closing tags: <tag /> -> <tag></tag> by changing all tags except those allowed to be empty
         if len(self.emptytags) > 0:
@@ -180,7 +176,7 @@ class Builder(object):
         for pair in self.replacements:
             output = output.replace(pair[0], pair[1])
 
-        # Strip whitespace
+        # Strip whitespace from empty lines and start of lines
         if self.strip:
             pos = 0
             result = ''
@@ -212,12 +208,12 @@ class Builder(object):
             return params[key]
 
         if len(self.header) > 0:
-            output = re.sub('@([a-zA-Z0-9]*?)@', helper, self.header) + output
+            output = re.sub('@([a-zA-Z0-9]*?)@', helper, self.header) + "\n" + output
 
         if len(self.footer) > 0:
-            output = output + re.sub('@([a-zA-Z0-9]*?)@', helper, self.footer)
+            output = output + "\n" + re.sub('@([a-zA-Z0-9]*?)@', helper, self.footer)
 
-        return output.strip()
+        return output
 
 
     _cache = {}
