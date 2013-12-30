@@ -36,8 +36,15 @@ class Scanner(object):
         if self.target:
             self.target = self.target.replace('/', os.sep)
 
-        self.statedir = xml.get('state')
-        self.pagination = xml.get('pagination', 10)
+        state = xml.find('state')
+        if not state is None:
+            self.statedir = state.get('save')
+            self.statevpath = state.get('vpath', self.source)
+            self.pagination = state.get('pagination', 10)
+        else:
+            self.statedir = None
+            self.statevpath = None
+            self.pagination =  10
 
         self.profiles = []
         for i in xml.findall('profile'):
@@ -78,8 +85,8 @@ class Scanner(object):
         if len(self.profiles) > 0 and not profile in self.profiles:
             return
 
-        source = os.path.normpath(os.path.join(Config.confdir, self.source))
-        target = os.path.normpath(os.path.join(Config.confdir, self.target))
+        source = Config.path(self.source)
+        target = Config.path(self.target)
 
         states = []
         for (dir, dirs, files) in os.walk(source):
@@ -106,7 +113,7 @@ class Scanner(object):
                             bparams.update(params)
                             s = builder.execute(profile, bparams, source, target, relpath, match.ending)
                             if s and s.valid:
-                                states.append((self.source, relpath, s))
+                                states.append((relpath, s))
 
                         # Execute the action if any
                         if match.action == 'link':
@@ -131,29 +138,32 @@ class Scanner(object):
             return
 
         from .config import Config
-        path = Config.path(self.statedir)
+        statedir = Config.path(self.statedir)
+        vpath = Config.path(self.statevpath)
         util.message('Building state:')
 
         # Sort our state data
-        states = sorted(states, key=lambda entry: entry[2], reverse=True)
+        states = sorted(states, key=lambda entry: entry[1], reverse=True)
 
         # Build our tags lists
         tags = {}
         for entry in states:
-            for tag in entry[2].tags:
+            for tag in entry[1].tags:
                 if not tag in tags:
                     tags[tag] = []
 
                 tags[tag].append(entry)
 
         # Build each specific state item
-        self.buildstate(os.path.join(path, 'recent'), states, 1)
+        self.buildstate(statedir, vpath, 'recent', states, 1)
         for tag in tags:
-            self.buildstate(os.path.join(path, 'tags', tag), tags[tag], 2)
+            self.buildstate(statedir, vpath, os.path.join('tags', tag), tags[tag], 2)
 
         util.status('OK')
 
-    def buildstate(self, path, entries, depth):
+    def buildstate(self, statedir, vpath, path, entries, depth):
+        from .config import Config
+
         ns='{urn:mrbavii:xmlsite.state}'
         count = int(self.pagination)
         if count < 2:
@@ -180,6 +190,11 @@ class Scanner(object):
             else:
                 nextname = None
 
+            # Determine root base information
+            realfile = os.path.join(statedir, path, filename)
+            vpathfile = os.path.join(vpath, path, filename)
+            rootbase = os.path.relpath(vpathfile, os.path.dirname(realfile)).replace(os.sep, '/')
+
             section = entries[pos:pos + count]
 
             # Don't forget to increase counter
@@ -188,6 +203,7 @@ class Scanner(object):
             
             # Root node
             state = etree.Element(ns + 'state')
+            state.base = rootbase
             state.set('stateroot', '../' * depth)
             if prevname:
                 state.set('prev', prevname)
@@ -197,36 +213,40 @@ class Scanner(object):
             # Child nodes
             for i in section:
                 sub = etree.SubElement(state, ns + 'entry')
-                sub.set('source', i[0].replace(os.sep, '/'))
-                sub.set('relpath', i[1].replace(os.sep, '/'))
+                sub.set('relpath', i[0].replace(os.sep, '/'))
+
+                # Base
+                origfile = os.path.join(Config.path(self.source), i[0])
+                entrybase = os.path.relpath(origfile, os.path.dirname(vpathfile)).replace(os.sep, '/')
+                sub.base = entrybase
 
                 # Modified
                 mod = etree.SubElement(sub, ns + 'modified')
-                mod.set('year', i[2].year)
-                mod.set('month', i[2].month)
-                mod.set('day', i[2].day)
+                mod.set('year', i[1].year)
+                mod.set('month', i[1].month)
+                mod.set('day', i[1].day)
 
                 # Title
                 title = etree.SubElement(sub, ns + 'title')
-                title.text = i[2].title
+                title.text = i[1].title
 
                 # Tags
-                for t in i[2].tags:
+                for t in i[1].tags:
                     tag = etree.SubElement(sub, ns + 'tag')
                     tag.set('name', t)
 
                 # Summarries
-                for s in i[2].summaries:
+                for s in i[1].summaries:
                     sum = etree.SubElement(sub, ns + 'summary')
                     sum.append(deepcopy(s))
 
             # Prepare to save file
             tree = etree.ElementTree(state)
 
-            if not os.path.isdir(path):
-                os.makedirs(path)
+            if not os.path.isdir(os.path.dirname(realfile)):
+                os.makedirs(os.path.dirname(realfile))
 
-            tree.write(os.path.join(path, filename), encoding="utf-8", xml_declaration=True, pretty_print=True);
+            tree.write(realfile, encoding="utf-8", xml_declaration=True, pretty_print=True);
             
             
 
