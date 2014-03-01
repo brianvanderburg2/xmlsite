@@ -8,6 +8,7 @@ import os
 import re
 
 from copy import deepcopy
+import cStringIO
 
 from . import util
 from .state import StateParser
@@ -246,7 +247,19 @@ class Scanner(object):
             if not os.path.isdir(os.path.dirname(realfile)):
                 os.makedirs(os.path.dirname(realfile))
 
-            tree.write(realfile, encoding="utf-8", xml_declaration=True, pretty_print=True);
-            
-            
+            # Read contents of real file and compare, only save if different
+            output = cStringIO.StringIO()
+            tree.write(output, encoding="utf-8", xml_declaration=True, pretty_print=True)
+            contents = output.getvalue().replace('\r\n', '\n').replace('\r', '\n')
+            output.close()
 
+            if os.path.isfile(realfile):
+                with open(realfile, 'rU') as handle:
+                    current = handle.read()
+                if current != contents:
+                    with open(realfile, 'wb') as handle:
+                        handle.write(contents)
+            else:
+                with open(realfile, 'wb') as handle:
+                    handle.write(contents)
+            
