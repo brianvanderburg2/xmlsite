@@ -63,7 +63,7 @@ class StateParser(object):
             state = _State()
 
             if self.bookmark:
-                bookmark = entry.xpath(self.bookmark, namepsaces=self.ns)
+                bookmark = entry.xpath(self.bookmark, namespaces=self.ns)
                 if bookmark:
                     state.bookmark = '' + bookmark[0]
 
