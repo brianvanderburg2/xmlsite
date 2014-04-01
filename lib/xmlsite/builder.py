@@ -37,7 +37,7 @@ class Builder(object):
             self.transforms[i.get('root')] = i.get('xsl')
             state = i.find('state')
             if state is not None:
-                self.states[i.get('root')] = StateParser(state)
+                self.states[i.get('root')] = StateParser.load(state)
 
         # Header and footer
         def loader(elem):
@@ -132,7 +132,7 @@ class Builder(object):
         if root in self.states:
             return self.states[root].execute(inxml)
         else:
-            return None
+            return []
 
     def build(self, sourcefile, targetfile, params):
         inxml = etree.parse(sourcefile);

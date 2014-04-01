@@ -9,6 +9,7 @@ from lxml import etree
 
 class _State(object):
     def __init__(self):
+        self.bookmark = None
         self.year = None
         self.month = None
         self.day = None
@@ -34,6 +35,8 @@ class _State(object):
 
 class StateParser(object):
     def __init__(self, xml):
+        self.entry = xml.get('entry')
+        self.bookmark = xml.get('bookmark')
         self.year = xml.get('year')
         self.month = xml.get('month')
         self.day = xml.get('day')
@@ -46,42 +49,57 @@ class StateParser(object):
             self.ns[i.get('prefix')] = i.get('value')
 
     @staticmethod
-    def valid(self):
-        return self.year and self.month and self.day and self.title and (self.summary is not None) and self.tag
-
-    @staticmethod
     def load(xml):
-        return State(xml)
+        return StateParser(xml)
 
     def execute(self, xml):
-        state = _State()
+        if self.entry:
+            entries = xml.xpath(self.entry, namespaces=self.ns)
+        else:
+            entries = [xml]
 
-        if not self.valid:
-            return state
+        states = []
+        for entry in entries:
+            state = _State()
 
-        year = xml.xpath(self.year, namespaces=self.ns)
-        if year:
-            state.year = '' + year[0]
-        
-        month = xml.xpath(self.month, namespaces=self.ns)
-        if month:
-            state.month = '' + month[0]
-        
-        day = xml.xpath(self.day, namespaces=self.ns)
-        if day:
-            state.day = '' + day[0]
-        
-        title = xml.xpath(self.title, namespaces=self.ns)
-        if title:
-            state.title = '' + title[0]
+            if self.bookmark:
+                bookmark = entry.xpath(self.bookmark, namepsaces=self.ns)
+                if bookmark:
+                    state.bookmark = '' + bookmark[0]
 
-        summaries = xml.xpath(self.summary, namespaces=self.ns)
-        for summary in summaries:
-            state.summaries.append(deepcopy(summary))
-            
-        tags = xml.xpath(self.tag, namespaces=self.ns)
-        for tag in tags:
-            state.tags.append('' + tag)
+            if self.year:
+                year = entry.xpath(self.year, namespaces=self.ns)
+                if year:
+                    state.year = '' + year[0]
 
-        return state
+            if self.month:
+                month = entry.xpath(self.month, namespaces=self.ns)
+                if month:
+                    state.month = '' + month[0]
+
+            if self.day:
+                day = entry.xpath(self.day, namespaces=self.ns)
+                if day:
+                    state.day = '' + day[0]
+
+            if self.title:
+                title = entry.xpath(self.title, namespaces=self.ns)
+                if title:
+                    state.title = '' + title[0]
+
+            if self.summary:
+                summaries = entry.xpath(self.summary, namespaces=self.ns)
+                for summary in summaries:
+                    state.summaries.append(deepcopy(summary))
+
+            if self.tag:
+                tags = entry.xpath(self.tag, namespaces=self.ns)
+                for tag in tags:
+                    if not '' + tag in state.tags:
+                        state.tags.append('' + tag)
+
+            if state.valid:
+                states.append(state)
+
+        return states
     

@@ -113,8 +113,8 @@ class Scanner(object):
                             bparams = self.params.copy()
                             bparams.update(params)
                             s = builder.execute(profile, bparams, source, target, relpath, match.ending)
-                            if s and s.valid:
-                                states.append((relpath, s))
+                            if s:
+                                states.extend([(relpath, s2) for s2 in s])
 
                         # Execute the action if any
                         if match.action == 'link':
@@ -214,12 +214,17 @@ class Scanner(object):
             # Child nodes
             for i in section:
                 sub = etree.SubElement(state, ns + 'entry')
-                sub.set('relpath', i[0].replace(os.sep, '/'))
 
                 # Base
                 origfile = os.path.join(Config.path(self.source), i[0])
                 entrybase = os.path.relpath(origfile, os.path.dirname(vpathfile)).replace(os.sep, '/')
                 sub.base = entrybase
+                
+                # Relpath and bookmark
+                sub.set('relpath', i[0].replace(os.sep, '/'))
+                if i[1].bookmark:
+                    sub.set('bookmark', i[1].bookmark)
+
 
                 # Modified
                 mod = etree.SubElement(sub, ns + 'modified')
