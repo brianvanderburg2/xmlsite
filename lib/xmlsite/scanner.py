@@ -28,6 +28,8 @@ class _Match(object):
 class Scanner(object):
     def __init__(self, xml):
         """ Parse and load the scanner """
+        self.statens = '{urn:mrbavii:xmlsite.state}'
+
         self.source = xml.get('source')
         self.target = xml.get('target')
 
@@ -42,10 +44,14 @@ class Scanner(object):
             self.statedir = state.get('save')
             self.statevpath = state.get('vpath', self.source)
             self.pagination = state.get('pagination', 10)
+            self.allname = state.get('name', 'recent')
+            self.tagsname = state.get('tagsname', 'tags')
         else:
             self.statedir = None
             self.statevpath = None
             self.pagination =  10
+            self.allname = 'recent'
+            self.tagsname = 'tags'
 
         self.profiles = []
         for i in xml.findall('profile'):
@@ -150,22 +156,23 @@ class Scanner(object):
         tags = {}
         for entry in states:
             for tag in entry[1].tags:
-                if not tag in tags:
-                    tags[tag] = []
+                if tag != self.allname and tag != self.tagsname:
+                    if not tag in tags:
+                        tags[tag] = []
 
-                tags[tag].append(entry)
+                    tags[tag].append(entry)
 
         # Build each specific state item
-        self.buildstate(statedir, vpath, 'recent', states, 1)
+        self.buildstate(statedir, vpath, self.allname, states)
         for tag in tags:
-            self.buildstate(statedir, vpath, os.path.join('tags', tag), tags[tag], 2)
+            self.buildstate(statedir, vpath, tag, tags[tag])
+        self.buildtags(statedir, vpath, tags)
 
         util.status('OK')
 
-    def buildstate(self, statedir, vpath, path, entries, depth):
+    def buildstate(self, statedir, vpath, name, entries):
         from .config import Config
 
-        ns='{urn:mrbavii:xmlsite.state}'
         count = int(self.pagination)
         if count < 2:
             count = 2
@@ -175,26 +182,26 @@ class Scanner(object):
         while pos < len(entries):
             # Determine the items and filenames
             if page == 0:
-                filename = 'index.xml'
+                filename = '{0}.xml'.format(name)
             else:
-                filename = 'index{0}.xml'.format(page)
+                filename = '{0}_{1}.xml'.format(name, page)
 
             if page == 0:
                 prevname = None
             elif page == 1:
-                prevname = 'index.xml'
+                prevname = '{0}.xml'.format(name)
             else:
-                prevname = 'index{0}.xml'.format(page - 1)
+                prevname = '{0}_{1}.xml'.format(name, page - 1)
 
             if pos + count < len(entries):
-                nextname = 'index{0}.xml'.format(page + 1)
+                nextname = '{0}_{1}.xml'.format(name, page + 1)
             else:
                 nextname = None
 
             # Determine root base information
-            realfile = os.path.join(statedir, path, filename)
-            vpathfile = os.path.join(vpath, path, filename)
-            rootbase = os.path.relpath(vpathfile, os.path.dirname(realfile)).replace(os.sep, '/')
+            realfile = os.path.join(statedir, filename)
+            vpathfile = os.path.join(vpath, filename)
+            rootbase = os.path.relpath(vpathfile, statedir).replace(os.sep, '/')
 
             section = entries[pos:pos + count]
 
@@ -203,9 +210,9 @@ class Scanner(object):
             page += 1
             
             # Root node
+            ns = self.statens
             state = etree.Element(ns + 'state')
             state.base = rootbase
-            state.set('stateroot', '../' * depth)
             if prevname:
                 state.set('prev', prevname)
             if nextname:
@@ -246,25 +253,54 @@ class Scanner(object):
                     sum = etree.SubElement(sub, ns + 'summary')
                     sum.append(deepcopy(s))
 
-            # Prepare to save file
+            # Save
             tree = etree.ElementTree(state)
+            self.savefile(tree, realfile)
+           
+    def buildtags(self, statedir, vpath, tags):
+        filename = '{0}.xml'.format(self.tagsname)
 
-            if not os.path.isdir(os.path.dirname(realfile)):
-                os.makedirs(os.path.dirname(realfile))
+        # Determine root base information
+        realfile = os.path.join(statedir, filename)
+        vpathfile = os.path.join(vpath, filename)
+        rootbase = os.path.relpath(vpathfile, statedir).replace(os.sep, '/')
 
-            # Read contents of real file and compare, only save if different
-            output = cStringIO.StringIO()
-            tree.write(output, encoding="utf-8", xml_declaration=True, pretty_print=True)
-            contents = output.getvalue().replace('\r\n', '\n').replace('\r', '\n')
-            output.close()
+        # Prepare to build the document
+        ns = self.statens
+        root = etree.Element(ns + 'tags')
+        root.base = rootbase
 
-            if os.path.isfile(realfile):
-                with open(realfile, 'rU') as handle:
-                    current = handle.read()
-                if current != contents:
-                    with open(realfile, 'wb') as handle:
-                        handle.write(contents)
-            else:
-                with open(realfile, 'wb') as handle:
+        keys = sorted(tags.keys())
+        for tag in keys:
+            sub = etree.SubElement(root, ns + 'tag')
+            sub.set('name', tag)
+            sub.set('file', '{0}.xml'.format(tag))
+            sub.set('count', str(len(tags[tag])))
+
+        # Save
+        tree = etree.ElementTree(root)
+        self.savefile(tree, realfile)
+        
+    @staticmethod
+    def savefile(tree, filename):
+        # Create directory if not exist
+        dirname = os.path.dirname(filename)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+
+        # Save the output only if it differs from an existing file        
+        output = cStringIO.StringIO()
+        tree.write(output, encoding="utf-8", xml_declaration=True, pretty_print=True)
+        contents = output.getvalue().replace('\r\n', '\n').replace('\r', '\n')
+        output.close()
+
+        if os.path.isfile(filename):
+            with open(filename, 'rU') as handle:
+                current = handle.read()
+            if current != contents:
+                with open(filename, 'wb') as handle:
                     handle.write(contents)
-            
+        else:
+            with open(filename, 'wb') as handle:
+                handle.write(contents)
+

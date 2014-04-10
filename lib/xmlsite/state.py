@@ -95,7 +95,9 @@ class StateParser(object):
             if self.tag:
                 tags = entry.xpath(self.tag, namespaces=self.ns)
                 for tag in tags:
-                    if not '' + tag in state.tags:
+                    value = '' + tag
+                    value = value.lower()
+                    if value and not value in state.tags:
                         state.tags.append('' + tag)
 
             if state.valid:
