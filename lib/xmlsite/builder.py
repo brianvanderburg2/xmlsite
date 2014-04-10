@@ -81,8 +81,12 @@ class Builder(object):
         reldest = relpath[:-len(ending)] + self.extension
         targetfile = os.path.join(target, reldest)
 
+        # Only parse the file once
+        inxml = etree.parse(sourcefile)
+        inxml.xinclude()
+
         # Parse the state
-        state = self.buildstate(sourcefile)
+        state = self.buildstate(inxml)
 
         # Is the page out of date?
         if os.path.isfile(targetfile):
@@ -117,16 +121,14 @@ class Builder(object):
         bparams.update(coreparams)
 
         # Build
-        if self.build(sourcefile, targetfile, bparams):
+        if self.build(inxml, targetfile, bparams):
             util.status('OK')
         else:
             util.status('IGN')
 
         return state
 
-    def buildstate(self, sourcefile):
-        inxml = etree.parse(sourcefile)
-        inxml.xinclude()
+    def buildstate(self, inxml):
         root = inxml.getroot().tag
 
         if root in self.states:
@@ -134,9 +136,7 @@ class Builder(object):
         else:
             return []
 
-    def build(self, sourcefile, targetfile, params):
-        inxml = etree.parse(sourcefile);
-        inxml.xinclude()
+    def build(self, inxml, targetfile, params):
         out = self.buildhtml(inxml, params)
 
         if not out is None:
