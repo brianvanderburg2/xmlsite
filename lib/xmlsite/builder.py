@@ -34,10 +34,11 @@ class Builder(object):
         self.transforms = {}
         self.states = {}
         for i in xml.findall('transform'):
-            self.transforms[i.get('root')] = i.get('xsl')
+            root = self._getroot(i.get('root'))
+            self.transforms[root] = i.get('xsl')
             state = i.find('state')
             if state is not None:
-                self.states[i.get('root')] = StateParser.load(state)
+                self.states[root] = StateParser.load(state)
 
         # Header and footer
         def loader(elem):
@@ -69,6 +70,22 @@ class Builder(object):
         self.replacements = []
         for i in xml.findall('find'):
             self.replacements.append((i.get('match'), i.get('replace')))
+
+    @staticmethod
+    def _getroot(root):
+        from .config import Config
+        parts = root.split(':', 1)
+
+        # No prefix part
+        if len(parts) == 1:
+            return parts[0]
+
+        # There is a prefix part
+        ns = Config.namespace(parts[0])
+        if ns is None:
+            ns = parts[0]
+
+        return '{' + ns + '}' + parts[1]
     
     @staticmethod
     def load(xml):

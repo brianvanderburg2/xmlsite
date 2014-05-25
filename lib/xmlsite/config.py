@@ -18,6 +18,11 @@ class Config(object):
 
         self.confdir = os.path.normpath(os.path.dirname(filename))
 
+        # Namespaces
+        self.ns = {}
+        for i in xml.findall('namespace'):
+            self.ns[i.get('prefix')] = i.get('value')
+
         # Builders
         self.builders = {}
         for i in xml.findall('builder'):
@@ -48,4 +53,12 @@ class Config(object):
     @classmethod
     def property(self, name, defval=None):
         return self.properties.get(name, defval)
+
+    @classmethod
+    def namespaces(self):
+        return dict(self.ns.items())
+
+    @classmethod
+    def namespace(self, prefix):
+        return self.ns.get(prefix, None)
 

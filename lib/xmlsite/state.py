@@ -44,17 +44,16 @@ class StateParser(object):
         self.summary = xml.get('summary')
         self.tag = xml.get('tag')
 
-        self.ns = {}
-        for i in xml.findall('namespace'):
-            self.ns[i.get('prefix')] = i.get('value')
-
     @staticmethod
     def load(xml):
         return StateParser(xml)
 
     def execute(self, xml):
+        from .config import Config
+        ns = Config.namespaces()
+
         if self.entry:
-            entries = xml.xpath(self.entry, namespaces=self.ns)
+            entries = xml.xpath(self.entry, namespaces=ns)
         else:
             entries = [xml]
 
@@ -63,37 +62,37 @@ class StateParser(object):
             state = _State()
 
             if self.bookmark:
-                bookmark = entry.xpath(self.bookmark, namespaces=self.ns)
+                bookmark = entry.xpath(self.bookmark, namespaces=ns)
                 if bookmark:
                     state.bookmark = '' + bookmark[0]
 
             if self.year:
-                year = entry.xpath(self.year, namespaces=self.ns)
+                year = entry.xpath(self.year, namespaces=ns)
                 if year:
                     state.year = '' + year[0]
 
             if self.month:
-                month = entry.xpath(self.month, namespaces=self.ns)
+                month = entry.xpath(self.month, namespaces=ns)
                 if month:
                     state.month = '' + month[0]
 
             if self.day:
-                day = entry.xpath(self.day, namespaces=self.ns)
+                day = entry.xpath(self.day, namespaces=ns)
                 if day:
                     state.day = '' + day[0]
 
             if self.title:
-                title = entry.xpath(self.title, namespaces=self.ns)
+                title = entry.xpath(self.title, namespaces=ns)
                 if title:
                     state.title = '' + title[0]
 
             if self.summary:
-                summaries = entry.xpath(self.summary, namespaces=self.ns)
+                summaries = entry.xpath(self.summary, namespaces=ns)
                 for summary in summaries:
                     state.summaries.append(deepcopy(summary))
 
             if self.tag:
-                tags = entry.xpath(self.tag, namespaces=self.ns)
+                tags = entry.xpath(self.tag, namespaces=ns)
                 for tag in tags:
                     value = '' + tag
                     value = value.lower()

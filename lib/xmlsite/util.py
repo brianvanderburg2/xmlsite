@@ -7,6 +7,10 @@ import sys
 
 from lxml import etree
 
+# Basic error class
+class Error(Exception):
+    pass
+
 # Output related functions
 _size = 0
 
