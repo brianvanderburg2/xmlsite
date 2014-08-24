@@ -42,13 +42,11 @@ class Scanner(object):
         state = xml.find('state')
         if not state is None:
             self.statedir = state.get('save')
-            self.statevpath = state.get('vpath', self.source)
             self.pagination = state.get('pagination', 10)
             self.allname = state.get('name', 'recent')
             self.tagsname = state.get('tagsname', 'tags')
         else:
             self.statedir = None
-            self.statevpath = None
             self.pagination =  10
             self.allname = 'recent'
             self.tagsname = 'tags'
@@ -146,7 +144,6 @@ class Scanner(object):
 
         from .config import Config
         statedir = Config.path(self.statedir)
-        vpath = Config.path(self.statevpath)
         util.message('Building state:')
 
         # Sort our state data
@@ -163,14 +160,14 @@ class Scanner(object):
                     tags[tag].append(entry)
 
         # Build each specific state item
-        self.buildstate(statedir, vpath, self.allname, states)
+        self.buildstate(statedir, self.allname, states)
         for tag in tags:
-            self.buildstate(statedir, vpath, tag, tags[tag])
-        self.buildtags(statedir, vpath, tags)
+            self.buildstate(statedir, tag, tags[tag])
+        self.buildtags(statedir, tags)
 
         util.status('OK')
 
-    def buildstate(self, statedir, vpath, name, entries):
+    def buildstate(self, statedir, name, entries):
         from .config import Config
 
         count = int(self.pagination)
@@ -198,11 +195,8 @@ class Scanner(object):
             else:
                 nextname = None
 
-            # Determine root base information
+            # Determine information
             realfile = os.path.join(statedir, filename)
-            vpathfile = os.path.join(vpath, filename)
-            rootbase = os.path.relpath(vpathfile, statedir).replace(os.sep, '/')
-
             section = entries[pos:pos + count]
 
             # Don't forget to increase counter
@@ -212,7 +206,6 @@ class Scanner(object):
             # Root node
             ns = self.statens
             state = etree.Element(ns + 'state')
-            state.base = rootbase
             if prevname:
                 state.set('prev', prevname)
             if nextname:
@@ -222,11 +215,6 @@ class Scanner(object):
             for i in section:
                 sub = etree.SubElement(state, ns + 'entry')
 
-                # Base
-                origfile = os.path.join(Config.path(self.source), i[0])
-                entrybase = os.path.relpath(origfile, os.path.dirname(vpathfile)).replace(os.sep, '/')
-                sub.base = entrybase
-                
                 # Relpath and bookmark
                 sub.set('relpath', i[0].replace(os.sep, '/'))
                 if i[1].bookmark:
@@ -249,26 +237,22 @@ class Scanner(object):
                     tag.set('name', t)
 
                 # Summarries
-                for s in i[1].summaries:
-                    sum = etree.SubElement(sub, ns + 'summary')
-                    sum.append(deepcopy(s))
+                summary = etree.SubElement(sub, ns + 'summary')
+                summary.text = i[1].summary
 
             # Save
             tree = etree.ElementTree(state)
             self.savefile(tree, realfile)
            
-    def buildtags(self, statedir, vpath, tags):
+    def buildtags(self, statedir, tags):
         filename = '{0}.xml'.format(self.tagsname)
 
-        # Determine root base information
+        # Determine information
         realfile = os.path.join(statedir, filename)
-        vpathfile = os.path.join(vpath, filename)
-        rootbase = os.path.relpath(vpathfile, statedir).replace(os.sep, '/')
 
         # Prepare to build the document
         ns = self.statens
         root = etree.Element(ns + 'tags')
-        root.base = rootbase
 
         keys = sorted(tags.keys())
         for tag in keys:

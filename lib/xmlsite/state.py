@@ -14,12 +14,12 @@ class _State(object):
         self.month = None
         self.day = None
         self.title = None
-        self.summaries = []
+        self.summary = None
         self.tags = []
 
     @property
     def valid(self):
-        return bool(self.year and self.month and self.day and self.title and self.summaries)
+        return bool(self.year and self.month and self.day and self.title and self.summary)
 
     def __cmp__(self, other):
         v = int(self.year) - int(other.year)
@@ -87,9 +87,9 @@ class StateParser(object):
                     state.title = '' + title[0]
 
             if self.summary:
-                summaries = entry.xpath(self.summary, namespaces=ns)
-                for summary in summaries:
-                    state.summaries.append(deepcopy(summary))
+                summary = entry.xpath(self.summary, namespaces=ns)
+                if summary:
+                    state.summary = '' + summary[0]
 
             if self.tag:
                 tags = entry.xpath(self.tag, namespaces=ns)
