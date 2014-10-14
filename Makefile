@@ -14,7 +14,7 @@ test: check
 
 .PHONY: clean
 clean: check
-	rm -rf test/out
+	rm -rf test/output
 	rm -rf output
 
 .PHONY: tarball

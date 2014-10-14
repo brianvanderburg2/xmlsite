@@ -8,7 +8,7 @@
         <footer src="foot.txt" />
     </builder>
 
-    <scan source="in" target="out">
+    <scan source="input" target="output">
         <match ending=".xml" builder="main" action="link" />
     </scan>
 </xmlsite>
