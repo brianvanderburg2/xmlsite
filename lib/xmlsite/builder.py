@@ -14,8 +14,8 @@ from .state import StateParser
 
 
 class Builder(object):
-    def __init__(self, xml):
-        from .config import Config
+    def __init__(self, config, xml):
+        self.config = config
 
         # Basic stuff
         self.extension = xml.get('extension', '.html')
@@ -38,7 +38,7 @@ class Builder(object):
             self.transforms[root] = i.get('xsl')
             state = i.find('state')
             if state is not None:
-                self.states[root] = StateParser.load(state)
+                self.states[root] = StateParser.load(self.config, state)
 
         # Header and footer
         def loader(elem):
@@ -47,7 +47,7 @@ class Builder(object):
                 src = elem.get('src')
                 if src is not None:
                     enc = elem.get('encoding', 'utf-8')
-                    result = codecs.open(Config.path(src), 'rU', encoding=enc).read()
+                    result = codecs.open(self.config.path(src), 'rU', encoding=enc).read()
                 else:
                     result = elem.text
 
@@ -71,9 +71,7 @@ class Builder(object):
         for i in xml.findall('find'):
             self.replacements.append((i.get('match'), i.get('replace')))
 
-    @staticmethod
-    def _getroot(root):
-        from .config import Config
+    def _getroot(self, root):
         parts = root.split(':', 1)
 
         # No prefix part
@@ -81,18 +79,21 @@ class Builder(object):
             return parts[0]
 
         # There is a prefix part
-        ns = Config.namespace(parts[0])
+        ns = self.config.namespace(parts[0])
         if ns is None:
             ns = parts[0]
 
         return '{' + ns + '}' + parts[1]
     
     @staticmethod
-    def load(xml):
-        return Builder(xml)
+    def load(config, xml):
+        return Builder(config, xml)
 
-    def execute(self, profile, params, source, target, relpath, ending):
+    def execute(self, params, relpath, ending):
         util.message('Transforming: ' + relpath)
+
+        source = self.config.opts.indir
+        target = self.config.opts.outdir
 
         sourcefile = os.path.join(source, relpath)
         reldest = relpath[:-len(ending)] + self.extension
@@ -129,8 +130,7 @@ class Builder(object):
             'targetfile': targetfile.replace(os.sep, '/'),
             'sourcerpath': relpath.replace(os.sep, '/'),
             'targetrpath': reldest.replace(os.sep, '/'),
-            'relativeroot':  '../' * relpath.count(os.sep),
-            'profile': profile
+            'relativeroot':  '../' * relpath.count(os.sep)
         }
 
         bparams = self.params.copy()
@@ -244,8 +244,6 @@ class Builder(object):
         return cls._cache[path]
 
     def buildxml(self, xml, params):
-        from .config import Config
-
         # Prepare parameters
         params = dict(params)
         for i in params:
@@ -255,7 +253,7 @@ class Builder(object):
         result = None
         root = xml.getroot()
         if root.tag in self.transforms:
-            transform = self.getxslt(Config.path(self.transforms[root.tag]))
+            transform = self.getxslt(self.config.path(self.transforms[root.tag]))
             result = transform(xml, **params)
 
         return result

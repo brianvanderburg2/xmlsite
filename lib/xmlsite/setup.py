@@ -27,6 +27,7 @@ def rbase_uri(context, node=None):
     base = base.replace('/', os.sep)
     pbase = pbase.replace('/', os.sep)
 
+
     rbase = os.path.relpath(base, os.path.dirname(pbase))
     rbase = rbase.replace(os.sep, '/')
 
@@ -51,13 +52,13 @@ def highlight_code(context, code, syntax):
     import pygments.formatters
     import pygments.lexers
 
-    from .config import Config
+    global _config
 
     # Options
-    nowrap = not util.getbool(Config.property('highlight.wrap', 'no'))
-    noclasses = not util.getbool(Config.property('highlight.classes', 'yes'))
-    nobackground = not util.getbool(Config.property('highlight.background', 'no'))
-    cssclass = Config.property('highlight.cssclass', 'highlight')
+    nowrap = not util.getbool(_config.property('highlight.wrap', 'no'))
+    noclasses = not util.getbool(_config.property('highlight.classes', 'yes'))
+    nobackground = not util.getbool(_config.property('highlight.background', 'no'))
+    cssclass = _config.property('highlight.cssclass', 'highlight')
 
     lexer = pygments.lexers.get_lexer_by_name(syntax, stripall=True)
     formatter = pygments.formatters.HtmlFormatter(nowrap=nowrap,
@@ -73,7 +74,12 @@ def highlight_file(context, filename, syntax):
 
 
 # Add custom functions
-def setup():
+def setup(config):
+    # TODO: find a way that doesn't require storing global
+    # (Can we pass a config reference in the context?)
+    global _config
+    _config = config
+
     ns = etree.FunctionNamespace('urn:mrbavii:xmlsite')
 
     ns['base-uri'] = base_uri

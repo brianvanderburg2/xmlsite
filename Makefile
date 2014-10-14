@@ -10,7 +10,7 @@ check:
 
 .PHONY: test
 test: check
-	cd lib && python -B -m xmlsite.main -c ../test/config.xml -p main
+	cd lib && python -B -m xmlsite.main --config ../test/config.xml --scanner main --input-dir ../test/input --output-dir ../test/output
 
 .PHONY: clean
 clean: check

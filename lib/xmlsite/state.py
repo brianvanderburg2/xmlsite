@@ -34,7 +34,9 @@ class _State(object):
 
 
 class StateParser(object):
-    def __init__(self, xml):
+    def __init__(self, config, xml):
+        self.config = config
+
         self.entry = xml.get('entry')
         self.bookmark = xml.get('bookmark')
         self.year = xml.get('year')
@@ -45,12 +47,11 @@ class StateParser(object):
         self.tag = xml.get('tag')
 
     @staticmethod
-    def load(xml):
-        return StateParser(xml)
+    def load(config, xml):
+        return StateParser(config, xml)
 
     def execute(self, xml):
-        from .config import Config
-        ns = Config.namespaces()
+        ns = self.config.namespaces()
 
         if self.entry:
             entries = xml.xpath(self.entry, namespaces=ns)

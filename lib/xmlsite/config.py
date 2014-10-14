@@ -11,12 +11,21 @@ from .builder import Builder
 from .scanner import Scanner
 
 class Config(object):
-    @classmethod
-    def load(self, filename):
-        filename = os.path.normpath(filename)
-        xml = etree.parse(filename)
+    def __init__(self, opts):
+        # Set out information
+        self.opts = opts
 
+        filename = os.path.normpath(self.opts.config)
         self.confdir = os.path.normpath(os.path.dirname(filename))
+
+        # Update some paths
+        self.opts.indir = self.cwdpath(self.opts.indir)
+        self.opts.outdir = self.cwdpath(self.opts.outdir)
+        if not self.opts.statedir is None:
+            self.opts.statedir = self.cwdpath(self.opts.statedir)
+
+        # Parse document
+        xml = etree.parse(filename)
 
         # Namespaces
         self.ns = {}
@@ -26,12 +35,12 @@ class Config(object):
         # Builders
         self.builders = {}
         for i in xml.findall('builder'):
-            self.builders[i.get('name')] = Builder.load(i)
+            self.builders[i.get('name')] = Builder.load(self, i)
 
         # Scanners
-        self.scanners = []
-        for i in xml.findall('scan'):
-            self.scanners.append(Scanner.load(i))
+        self.scanners = {}
+        for i in xml.findall('scanner'):
+            self.scanners[i.get('name')] = Scanner.load(self, i)
 
         # Properties
         self.properties = {}
@@ -41,24 +50,26 @@ class Config(object):
             if name and value:
                 self.properties[name] = value;
 
-    @classmethod
-    def execute(self, profile, params):
-        for i in self.scanners:
-            i.execute(profile, params)
+    def execute(self):
+        if self.opts.scanner in self.scanners:
+            self.scanners[self.opts.scanner].execute()
+        else:
+            raise ValueError('No such scanner: ' + self.opts.scanner)
 
-    @classmethod
     def path(self, relpath):
-        return os.path.join(self.confdir, relpath)
+        # return abs path relative to config, relpath may contain '...', so normalize/make absolute
+        return os.path.normpath(os.path.join(self.confdir, relpath.replace('/', os.sep)))
 
-    @classmethod
+    def cwdpath(self, relpath):
+        # return abs path relative to cwd, relpath may contain '...', so normalize/make absolute
+        return os.path.normpath(os.path.join(os.getcwd(), relpath.replace('/', os.sep)))
+
     def property(self, name, defval=None):
         return self.properties.get(name, defval)
 
-    @classmethod
     def namespaces(self):
         return dict(self.ns.items())
 
-    @classmethod
     def namespace(self, prefix):
         return self.ns.get(prefix, None)
 

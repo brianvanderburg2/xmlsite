@@ -11,7 +11,6 @@ from copy import deepcopy
 import cStringIO
 
 from . import util
-from .state import StateParser
 
 from lxml import etree
 
@@ -26,36 +25,10 @@ class _Match(object):
         return _Match(xml)
 
 class Scanner(object):
-    def __init__(self, xml):
+    def __init__(self, config, xml):
         """ Parse and load the scanner """
+        self.config = config
         self.statens = '{urn:mrbavii:xmlsite.state}'
-
-        self.source = xml.get('source')
-        self.target = xml.get('target')
-
-        if self.source:
-            self.source = self.source.replace('/', os.sep)
-
-        if self.target:
-            self.target = self.target.replace('/', os.sep)
-
-        state = xml.find('state')
-        if not state is None:
-            self.statedir = state.get('save')
-            self.pagination = state.get('pagination', 10)
-            self.allname = state.get('name', 'recent')
-            self.tagsname = state.get('tagsname', 'tags')
-        else:
-            self.statedir = None
-            self.pagination =  10
-            self.allname = 'recent'
-            self.tagsname = 'tags'
-
-        self.profiles = []
-        for i in xml.findall('profile'):
-            profile = i.get('name')
-            if profile:
-                self.profiles.append(profile)
 
         self.includes = []
         for i in xml.findall('include'):
@@ -81,22 +54,14 @@ class Scanner(object):
                 self.params[name] = value
 
     @staticmethod
-    def load(xml):
-        return Scanner(xml)
+    def load(config, xml):
+        return Scanner(config, xml)
 
-    def execute(self, profile, params):
-        from .config import Config
-
-        if len(self.profiles) > 0 and not profile in self.profiles:
-            return
-
-        source = Config.path(self.source)
-        target = Config.path(self.target)
-
+    def execute(self):
         states = []
-        for (dir, dirs, files) in os.walk(source):
+        for (dir, dirs, files) in os.walk(self.config.opts.indir):
             for f in files:
-                relpath = os.path.relpath(os.path.join(dir, f), source)
+                relpath = os.path.relpath(os.path.join(dir, f), self.config.opts.indir)
                 compare = relpath.replace(os.sep, '/')
 
                 # Includes
@@ -112,38 +77,38 @@ class Scanner(object):
                 for match in self.matches:
                     if relpath.endswith(match.ending) or len(match.ending) == 0:
                         # Execute the builder and save the state if any
-                        builder = Config.builders.get(match.builder, None)
+                        builder = self.config.builders.get(match.builder, None)
                         if builder:
                             bparams = self.params.copy()
-                            bparams.update(params)
-                            s = builder.execute(profile, bparams, source, target, relpath, match.ending)
+                            bparams.update(self.config.opts.params)
+                            s = builder.execute(bparams, relpath, match.ending)
                             if s:
                                 states.extend([(relpath, s2) for s2 in s])
 
                         # Execute the action if any
                         if match.action == 'link':
-                            sourcefile = os.path.join(source, relpath)
-                            targetfile = os.path.join(target, relpath)
+                            sourcefile = os.path.join(self.config.opts.indir, relpath)
+                            targetfile = os.path.join(self.config.opts.outdir, relpath)
                             targetdir = os.path.dirname(targetfile)
 
-                            if not os.path.isdir(targetdir):
-                                os.makedirs(targetdir)
-                            elif os.path.exists(targetfile):
-                                os.unlink(targetfile)
+                            # Don't overwrite/remove if teh target is the source
+                            if sourcefile != targetfile:
+                                if not os.path.isdir(targetdir):
+                                    os.makedirs(targetdir)
+                                elif os.path.exists(targetfile):
+                                    os.unlink(targetfile)
 
-                            link = os.path.relpath(sourcefile, targetdir)
-                            os.symlink(link, targetfile)
+                                link = os.path.relpath(sourcefile, targetdir)
+                                os.symlink(link, targetfile)
     
         
         # Now save the states
         self.savestate(states)
 
     def savestate(self, states):
-        if self.statedir is None:
+        if self.config.opts.statedir is None:
             return
 
-        from .config import Config
-        statedir = Config.path(self.statedir)
         util.message('Building state:')
 
         # Sort our state data
@@ -153,24 +118,24 @@ class Scanner(object):
         tags = {}
         for entry in states:
             for tag in entry[1].tags:
-                if tag != self.allname and tag != self.tagsname:
+                if tag != self.config.opts.staterecentname and tag != self.config.opts.statetagsname:
                     if not tag in tags:
                         tags[tag] = []
 
                     tags[tag].append(entry)
 
         # Build each specific state item
-        self.buildstate(statedir, self.allname, states)
+        self.buildstate(self.config.opts.statedir, self.config.opts.staterecentname, states)
         for tag in tags:
-            self.buildstate(statedir, tag, tags[tag])
-        self.buildtags(statedir, tags)
+            self.buildstate(self.config.opts.statedir, tag, tags[tag], tag)
+        self.buildtags(self.config.opts.statedir, tags)
 
         util.status('OK')
 
-    def buildstate(self, statedir, name, entries):
+    def buildstate(self, statedir, name, entries, tagname=None):
         from .config import Config
 
-        count = int(self.pagination)
+        count = int(self.config.opts.statepagination)
         if count < 2:
             count = 2
 
@@ -210,6 +175,8 @@ class Scanner(object):
                 state.set('prev', prevname)
             if nextname:
                 state.set('next', nextname)
+            if tagname:
+                state.set('tag', tagname)
 
             # Child nodes
             for i in section:
@@ -245,7 +212,7 @@ class Scanner(object):
             self.savefile(tree, realfile)
            
     def buildtags(self, statedir, tags):
-        filename = '{0}.xml'.format(self.tagsname)
+        filename = '{0}.xml'.format(self.config.opts.statetagsname)
 
         # Determine information
         realfile = os.path.join(statedir, filename)
