@@ -23,7 +23,7 @@ def parse_cmdline():
     # Setup and parse command line
     parser = argparse.ArgumentParser(description='Build a site from from xml files.')
     parser.add_argument('--config', dest='config', action='store', required=True, help='xmlsite configuration file')
-    parser.add_argument('--scanner', dest='scanner', action='store', required=True, help='scanner to use for building')
+    parser.add_argument('--builder', dest='builder', action='store', required=True, help='builder to use for building')
     parser.add_argument('--input-dir', dest='indir', action='store', required=True, help='input directory')
     parser.add_argument('--output-dir', dest='outdir', action='store', required=True, help='output directory')
     parser.add_argument('--state-dir', dest='statedir', action='store', required=False, help='state directory to save to')
@@ -38,7 +38,7 @@ def parse_cmdline():
     opts = _CmdOptions()
 
     opts.config = result.config
-    opts.scanner = result.scanner
+    opts.builder = result.builder
     opts.indir = result.indir
     opts.outdir = result.outdir
 

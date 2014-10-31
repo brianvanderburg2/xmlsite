@@ -3,9 +3,11 @@
 # Purpose:      The builder class builds the output from xml files
 # License:      Refer to the file license.txt
 
+import sys
 import os
 import re
 import codecs
+import cStringIO
 
 from lxml import etree
 
@@ -16,11 +18,32 @@ from .state import StateParser
 class Builder(object):
     def __init__(self, config, xml):
         self.config = config
+        self.statens = '{urn:mrbavii:xmlsite.state}'
 
         # Basic stuff
         self.extension = xml.get('extension', '.html')
         self.encoding = xml.get('encoding', 'utf-8')
         self.strip = util.getbool(xml.get('strip', 'no'))
+        self.link = util.getbool(xml.get('link', 'no'))
+
+        # Includes
+        self.includes = []
+        for i in xml.findall('include'):
+            pattern = i.get('pattern')
+            if pattern:
+                self.includes.append(pattern)
+
+        # Excludes
+        self.excludes = []
+        for i in xml.findall('exclude'):
+            pattern = i.get('pattern')
+            if pattern:
+                self.excludes.append(pattern)
+
+        # Matching extensions
+        self.matches = []
+        for i in xml.findall('match'):
+            self.matches.append(i.get('ending'))
 
         # Parameters
         self.params = {}
@@ -89,61 +112,109 @@ class Builder(object):
     def load(config, xml):
         return Builder(config, xml)
 
-    def execute(self, params, relpath, ending):
-        util.message('Transforming: ' + relpath)
+    def execute(self):
+        sourceroot = self.config.opts.indir
+        targetroot = self.config.opts.outdir
 
-        source = self.config.opts.indir
-        target = self.config.opts.outdir
+        states = []
+        for (dir, dirs, files) in os.walk(sourceroot):
+            for f in files:
+                relpath = os.path.relpath(os.path.join(dir, f), sourceroot)
+                compare = relpath.replace(os.sep, '/')
 
-        sourcefile = os.path.join(source, relpath)
-        reldest = relpath[:-len(ending)] + self.extension
-        targetfile = os.path.join(target, reldest)
+                # Includes
+                found = any([re.search(i, compare) for i in self.includes])
+                if not found and len(self.includes) > 0:
+                    continue
 
-        # Only parse the file once
-        inxml = etree.parse(sourcefile)
-        inxml.xinclude()
+                # Excludes
+                if any([re.search(i, compare) for i in self.excludes]):
+                    continue
 
-        # Parse the state
-        state = self.buildstate(inxml)
+                # Matches
+                found = False
+                for i in self.matches:
+                    if relpath.endswith(i) or len(i) == 0:
+                        found = True
+                        ending = i
 
-        # Is the page out of date?
-        if os.path.isfile(targetfile):
-            stime = os.stat(sourcefile).st_mtime
-            ttime = os.stat(targetfile).st_mtime
+                if not found:
+                    continue
 
-            if stime < ttime:
-                util.status('NC')
-                return state
+                # Do it
+                util.message('Transforming: ' + relpath)
 
-            os.unlink(targetfile)
+                sourcefile = os.path.join(sourceroot, relpath)
+                reldest = relpath[:-len(ending)] + self.extension
+                targetfile = os.path.join(targetroot, reldest)
 
-        # Parameters
-        sourcedir = os.path.dirname(sourcefile)
-        targetdir = os.path.dirname(targetfile)
+                if sourcefile == targetfile:
+                    util.status('SAME')
+                    continue
 
-        coreparams = {
-            'sourceroot': source.replace(os.sep, '/').rstrip('/') + '/',
-            'targetroot': target.replace(os.sep, '/').rstrip('/') + '/',
-            'sourcedir': sourcedir.replace(os.sep, '/').rstrip('/') + '/',
-            'targetdir': targetdir.replace(os.sep, '/').rstrip('/') + '/',
-            'sourcefile': sourcefile.replace(os.sep, '/'),
-            'targetfile': targetfile.replace(os.sep, '/'),
-            'sourcerpath': relpath.replace(os.sep, '/'),
-            'targetrpath': reldest.replace(os.sep, '/'),
-            'relativeroot':  '../' * relpath.count(os.sep)
-        }
+                # Only parse the file once
+                inxml = etree.parse(sourcefile)
+                inxml.xinclude()
 
-        bparams = self.params.copy()
-        bparams.update(params)
-        bparams.update(coreparams)
+                # Parse the state
+                state = self.buildstate(inxml)
+                if state:
+                    states.extend([(relpath, i) for i in state])
 
-        # Build
-        if self.build(inxml, targetfile, bparams):
-            util.status('OK')
-        else:
-            util.status('IGN')
+                # Is the page out of date?
+                if os.path.isfile(targetfile):
+                    stime = os.stat(sourcefile).st_mtime
+                    ttime = os.stat(targetfile).st_mtime
 
-        return state
+                    if stime < ttime:
+                        util.status('NC')
+                        continue
+
+                    os.unlink(targetfile)
+
+                # Parameters
+                sourcedir = os.path.dirname(sourcefile)
+                targetdir = os.path.dirname(targetfile)
+
+                coreparams = {
+                    'sourceroot': sourceroot.replace(os.sep, '/').rstrip('/') + '/',
+                    'targetroot': targetroot.replace(os.sep, '/').rstrip('/') + '/',
+                    'sourcedir': sourcedir.replace(os.sep, '/').rstrip('/') + '/',
+                    'targetdir': targetdir.replace(os.sep, '/').rstrip('/') + '/',
+                    'sourcefile': sourcefile.replace(os.sep, '/'),
+                    'targetfile': targetfile.replace(os.sep, '/'),
+                    'sourcerpath': relpath.replace(os.sep, '/'),
+                    'targetrpath': reldest.replace(os.sep, '/'),
+                    'relativeroot':  '../' * relpath.count(os.sep)
+                }
+
+                bparams = self.params.copy()
+                bparams.update(self.config.opts.params)
+                bparams.update(coreparams)
+
+                # Build
+                if self.build(inxml, targetfile, bparams):
+                    util.status('OK')
+                else:
+                    util.status('IGN')
+
+                # Link if desired
+                if self.link:
+                    linkfile = os.path.join(targetroot, relpath)
+                    linkdir = os.path.dirname(linkfile)
+
+                    # Don't overwrite/remove if the link is the source
+                    if sourcefile != linkfile:
+                        if not os.path.isdir(linkdir):
+                            os.makedirs(linkdir)
+                        elif os.path.exists(linkfile):
+                            os.unlink(linkfile)
+
+                        link = os.path.relpath(sourcefile, linkdir)
+                        os.symlink(link, linkfile)
+
+        # Finally, build the states
+        self.savestate(states)
 
     def buildstate(self, inxml):
         root = inxml.getroot().tag
@@ -264,4 +335,152 @@ class Builder(object):
             result = self.cleanup(etree.tostring(result, pretty_print=True), params)
 
         return result
+
+    def savestate(self, states):
+        if self.config.opts.statedir is None:
+            return
+
+        util.message('Building state:')
+
+        # Sort our state data
+        states = sorted(states, key=lambda entry: entry[1], reverse=True)
+
+        # Build our tags lists
+        tags = {}
+        for entry in states:
+            for tag in entry[1].tags:
+                if tag != self.config.opts.staterecentname and tag != self.config.opts.statetagsname:
+                    if not tag in tags:
+                        tags[tag] = []
+
+                    tags[tag].append(entry)
+
+        # Build each specific state item
+        self.savestatefile(self.config.opts.statedir, self.config.opts.staterecentname, states)
+        for tag in tags:
+            self.savestatefile(self.config.opts.statedir, tag, tags[tag], tag)
+        self.savetagsfile(self.config.opts.statedir, tags)
+
+        util.status('OK')
+
+    def savestatefile(self, statedir, name, entries, tagname=None):
+        count = int(self.config.opts.statepagination)
+        if count < 2:
+            count = 2
+
+        pos = 0
+        page = 0
+        while pos < len(entries):
+            # Determine the items and filenames
+            if page == 0:
+                filename = '{0}.xml'.format(name)
+            else:
+                filename = '{0}_{1}.xml'.format(name, page)
+
+            if page == 0:
+                prevname = None
+            elif page == 1:
+                prevname = '{0}.xml'.format(name)
+            else:
+                prevname = '{0}_{1}.xml'.format(name, page - 1)
+
+            if pos + count < len(entries):
+                nextname = '{0}_{1}.xml'.format(name, page + 1)
+            else:
+                nextname = None
+
+            # Determine information
+            realfile = os.path.join(statedir, filename)
+            section = entries[pos:pos + count]
+
+            # Don't forget to increase counter
+            pos += count
+            page += 1
+
+            # Root node
+            ns = self.statens
+            state = etree.Element(ns + 'state')
+            if prevname:
+                state.set('prev', prevname)
+            if nextname:
+                state.set('next', nextname)
+            if tagname:
+                state.set('tag', tagname)
+
+            # Child nodes
+            for i in section:
+                sub = etree.SubElement(state, ns + 'entry')
+
+                # Relpath and bookmark
+                sub.set('relpath', i[0].replace(os.sep, '/'))
+                if i[1].bookmark:
+                    sub.set('bookmark', i[1].bookmark)
+
+
+                # Modified
+                mod = etree.SubElement(sub, ns + 'modified')
+                mod.set('year', i[1].year)
+                mod.set('month', i[1].month)
+                mod.set('day', i[1].day)
+
+                # Title
+                title = etree.SubElement(sub, ns + 'title')
+                title.text = i[1].title
+
+                # Tags
+                for t in i[1].tags:
+                    tag = etree.SubElement(sub, ns + 'tag')
+                    tag.set('name', t)
+
+                # Summarries
+                summary = etree.SubElement(sub, ns + 'summary')
+                summary.text = i[1].summary
+
+            # Save
+            tree = etree.ElementTree(state)
+            self.savefile(tree, realfile)
+
+    def savetagsfile(self, statedir, tags):
+        filename = '{0}.xml'.format(self.config.opts.statetagsname)
+
+        # Determine information
+        realfile = os.path.join(statedir, filename)
+
+        # Prepare to build the document
+        ns = self.statens
+        root = etree.Element(ns + 'tags')
+
+        keys = sorted(tags.keys())
+        for tag in keys:
+            sub = etree.SubElement(root, ns + 'tag')
+            sub.set('name', tag)
+            sub.set('file', '{0}.xml'.format(tag))
+            sub.set('count', str(len(tags[tag])))
+
+        # Save
+        tree = etree.ElementTree(root)
+        self.savefile(tree, realfile)
+
+    @staticmethod
+    def savefile(tree, filename):
+        # Create directory if not exist
+        dirname = os.path.dirname(filename)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+
+        # Save the output only if it differs from an existing file
+        output = cStringIO.StringIO()
+        tree.write(output, encoding="utf-8", xml_declaration=True, pretty_print=True)
+        contents = output.getvalue().replace('\r\n', '\n').replace('\r', '\n')
+        output.close()
+
+        if os.path.isfile(filename):
+            with open(filename, 'rU') as handle:
+                current = handle.read()
+            if current != contents:
+                with open(filename, 'wb') as handle:
+                    handle.write(contents)
+        else:
+            with open(filename, 'wb') as handle:
+                handle.write(contents)
 

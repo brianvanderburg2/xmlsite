@@ -8,7 +8,6 @@ import os
 from lxml import etree
 
 from .builder import Builder
-from .scanner import Scanner
 
 class Config(object):
     def __init__(self, opts):
@@ -37,11 +36,6 @@ class Config(object):
         for i in xml.findall('builder'):
             self.builders[i.get('name')] = Builder.load(self, i)
 
-        # Scanners
-        self.scanners = {}
-        for i in xml.findall('scanner'):
-            self.scanners[i.get('name')] = Scanner.load(self, i)
-
         # Properties
         self.properties = {}
         for i in xml.findall('property'):
@@ -51,10 +45,10 @@ class Config(object):
                 self.properties[name] = value;
 
     def execute(self):
-        if self.opts.scanner in self.scanners:
-            self.scanners[self.opts.scanner].execute()
+        if self.opts.builder in self.builders:
+            self.builders[self.opts.builder].execute()
         else:
-            raise ValueError('No such scanner: ' + self.opts.scanner)
+            raise ValueError('No such builder: ' + self.opts.builder)
 
     def path(self, relpath):
         # return abs path relative to config, relpath may contain '...', so normalize/make absolute
