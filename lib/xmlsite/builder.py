@@ -120,6 +120,7 @@ class Builder(object):
         for (dir, dirs, files) in os.walk(sourceroot):
             for f in files:
                 relpath = os.path.relpath(os.path.join(dir, f), sourceroot)
+                sourcefile = os.path.join(sourceroot, relpath)
                 compare = relpath.replace(os.sep, '/')
 
                 # Includes
@@ -131,7 +132,22 @@ class Builder(object):
                 if any([re.search(i, compare) for i in self.excludes]):
                     continue
 
-                # Matches
+                # Link first if desired
+                if self.link:
+                    linkfile = os.path.join(targetroot, relpath)
+                    linkdir = os.path.dirname(linkfile)
+
+                    # Don't overwrite/remove if the link is the source
+                    if sourcefile != linkfile:
+                        if not os.path.isdir(linkdir):
+                            os.makedirs(linkdir)
+                        elif os.path.exists(linkfile):
+                            os.unlink(linkfile)
+
+                        link = os.path.relpath(sourcefile, linkdir)
+                        os.symlink(link, linkfile)
+
+                # Matches used for building
                 found = False
                 for i in self.matches:
                     if relpath.endswith(i) or len(i) == 0:
@@ -144,7 +160,6 @@ class Builder(object):
                 # Do it
                 util.message('Transforming: ' + relpath)
 
-                sourcefile = os.path.join(sourceroot, relpath)
                 reldest = relpath[:-len(ending)] + self.extension
                 targetfile = os.path.join(targetroot, reldest)
 
@@ -198,20 +213,6 @@ class Builder(object):
                 else:
                     util.status('IGN')
 
-                # Link if desired
-                if self.link:
-                    linkfile = os.path.join(targetroot, relpath)
-                    linkdir = os.path.dirname(linkfile)
-
-                    # Don't overwrite/remove if the link is the source
-                    if sourcefile != linkfile:
-                        if not os.path.isdir(linkdir):
-                            os.makedirs(linkdir)
-                        elif os.path.exists(linkfile):
-                            os.unlink(linkfile)
-
-                        link = os.path.relpath(sourcefile, linkdir)
-                        os.symlink(link, linkfile)
 
         # Finally, build the states
         self.savestate(states)
